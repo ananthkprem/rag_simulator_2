@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG Simulator — A Visual Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@400;500;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4ecdc;
+    --paper-2: #ebe1cb;
+    --ink: #1a1a1a;
+    --ink-soft: #3d3a32;
+    --rule: #c9bfa5;
+    --accent: #d63f1e;
+    --accent-2: #2563a0;
+    --accent-3: #b88a00;
+    --success: #5a7c3a;
+    --shadow: 0 1px 0 rgba(26,26,26,0.08), 0 8px 24px -8px rgba(26,26,26,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Paper texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(184,138,0,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(37,99,160,0.025) 0%, transparent 50%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* ============ HEADER ============ */
+  header {
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 16px 0 24px;
+    margin-bottom: 48px;
+    position: relative;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 32px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .header-top span:nth-child(2) {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(48px, 8vw, 96px);
+    line-height: 0.92;
+    letter-spacing: -0.03em;
+    font-variation-settings: 'opsz' 144;
+  }
+
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    margin-top: 20px;
+    font-size: 17px;
+    max-width: 640px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+
+  .header-meta {
+    position: absolute;
+    right: 0;
+    top: 60px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-align: right;
+    color: var(--ink-soft);
+    line-height: 1.6;
+  }
+
+  /* ============ STEP NAVIGATION ============ */
+  .stepper {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    margin-bottom: 40px;
+    border: 1px solid var(--ink);
+    background: var(--paper-2);
+  }
+
+  .step-pill {
+    padding: 16px 14px;
+    border-right: 1px solid var(--rule);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: transparent;
+    text-align: left;
+    position: relative;
+  }
+
+  .step-pill:last-child { border-right: none; }
+
+  .step-pill:hover {
+    background: rgba(26,26,26,0.04);
+  }
+
+  .step-pill.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .step-pill.complete::after {
+    content: '✓';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--success);
+    font-weight: 700;
+  }
+
+  .step-pill.active.complete::after {
+    color: #a8c97d;
+  }
+
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    opacity: 0.6;
+    letter-spacing: 0.1em;
+  }
+
+  .step-name {
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    font-weight: 500;
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+
+  /* ============ MAIN LAYOUT ============ */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 32px;
+    align-items: start;
+  }
+
+  .stage {
+    background: var(--paper-2);
+    border: 1px solid var(--ink);
+    box-shadow: var(--shadow);
+    min-height: 560px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stage-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .stage-title {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 400;
+    font-style: italic;
+  }
+
+  .stage-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--accent);
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+
+  .stage-body {
+    padding: 28px 24px;
+  }
+
+  .stage-description {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin-bottom: 24px;
+    max-width: 620px;
+  }
+
+  .stage-description strong {
+    color: var(--ink);
+    font-weight: 600;
+    background: linear-gradient(transparent 60%, rgba(214,63,30,0.18) 60%);
+    padding: 0 2px;
+  }
+
+  /* ============ SIDEBAR ============ */
+  .sidebar {
+    position: sticky;
+    top: 24px;
+  }
+
+  .panel {
+    background: var(--paper-2);
+    border: 1px solid var(--ink);
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    background: var(--paper);
+  }
+
+  .panel-body {
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .control-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .control-btn:hover:not(:disabled) {
+    background: var(--accent);
+  }
+
+  .control-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .control-btn.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    margin-top: 8px;
+  }
+
+  .control-btn.secondary:hover:not(:disabled) {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* ============ STEP CONTENT ============ */
+  .step-content { display: none; animation: fadeIn 0.4s ease; }
+  .step-content.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Step 1: Documents */
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .doc-card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 16px;
+    position: relative;
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .doc-card:hover {
+    border-color: var(--ink);
+    transform: translateY(-2px);
+  }
+
+  .doc-icon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent-2);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .doc-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 15px;
+    margin-bottom: 8px;
+    line-height: 1.2;
+  }
+
+  .doc-preview {
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.45;
+  }
+
+  /* Step 2: Chunks */
+  .chunk-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+
+  .chunk {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    border-left: 3px solid var(--accent-3);
+    font-size: 13px;
+    line-height: 1.5;
+    position: relative;
+    transition: all 0.3s;
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+
+  .chunk.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .chunk-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-soft);
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Step 3: Embeddings */
+  .vector-display {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 16px;
+    margin-top: 12px;
+  }
+
+  .vector-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-2);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .vector-row {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+
+  .vector-row:last-child { border-bottom: none; }
+
+  .vector-text {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .vector-bars {
+    display: flex;
+    gap: 2px;
+    height: 32px;
+    align-items: flex-end;
+  }
+
+  .vector-bar {
+    flex: 1;
+    background: var(--accent-2);
+    min-height: 2px;
+    transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Embedding space */
+  .embedding-space {
+    position: relative;
+    height: 380px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    margin-top: 16px;
+    overflow: hidden;
+  }
+
+  .embed-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(26,26,26,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26,26,26,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .embed-point {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent-3);
+    border: 2px solid var(--ink);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .embed-point:hover {
+    transform: translate(-50%, -50%) scale(1.5);
+    z-index: 5;
+  }
+
+  .embed-point.query {
+    background: var(--accent);
+    width: 18px;
+    height: 18px;
+    box-shadow: 0 0 0 6px rgba(214,63,30,0.18);
+    z-index: 10;
+  }
+
+  .embed-point.retrieved {
+    background: var(--success);
+    box-shadow: 0 0 0 4px rgba(90,124,58,0.25);
+  }
+
+  .embed-label {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 2px 6px;
+    transform: translate(8px, -50%);
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .embed-point:hover + .embed-label,
+  .embed-point.query ~ .embed-label.query-label {
+    opacity: 1;
+  }
+
+  .embed-axes {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-soft);
+    letter-spacing: 0.08em;
+  }
+
+  /* Step 4: Retrieval */
+  .query-box {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 16px;
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .query-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    margin-bottom: 6px;
+  }
+
+  .query-text {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-style: italic;
+    line-height: 1.3;
+  }
+
+  .similarity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sim-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 80px;
+    gap: 14px;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    transition: all 0.3s;
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  .sim-row.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .sim-row.top {
+    border-color: var(--success);
+    border-left: 4px solid var(--success);
+    background: rgba(90,124,58,0.06);
+  }
+
+  .sim-rank {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  .sim-text {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .sim-score {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .sim-bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: var(--rule);
+    margin-top: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sim-bar-fill {
+    height: 100%;
+    background: var(--accent-2);
+    width: 0;
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .sim-row.top .sim-bar-fill { background: var(--success); }
+
+  /* Step 5: Generation */
+  .prompt-build {
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  .prompt-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .prompt-section:last-child { border-bottom: none; }
+
+  .prompt-section-label {
+    color: var(--accent);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .prompt-section.context { background: rgba(37,99,160,0.04); }
+  .prompt-section.query { background: rgba(214,63,30,0.04); }
+
+  .answer-block {
+    margin-top: 20px;
+    padding: 20px;
+    background: var(--ink);
+    color: var(--paper);
+    position: relative;
+  }
+
+  .answer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--accent-3);
+    margin-bottom: 10px;
+  }
+
+  .answer-text {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    line-height: 1.45;
+    font-weight: 300;
+    min-height: 60px;
+  }
+
+  .typing-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 0.8s infinite;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Query selector */
+  .query-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .query-option {
+    padding: 10px 12px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.3;
+    transition: all 0.2s;
+    text-align: left;
+    font-family: inherit;
+    color: var(--ink);
+  }
+
+  .query-option:hover {
+    border-color: var(--ink);
+    background: var(--paper-2);
+  }
+
+  .query-option.selected {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--paper-2); }
+  ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-soft); }
+
+  /* Mobile */
+  @media (max-width: 900px) {
+    .container { padding: 24px 16px; }
+    .workspace { grid-template-columns: 1fr; }
+    .sidebar { position: static; }
+    .stepper { grid-template-columns: repeat(2, 1fr); }
+    .step-pill:nth-child(2n) { border-right: none; }
+    .step-pill { border-bottom: 1px solid var(--rule); }
+    .doc-grid { grid-template-columns: 1fr; }
+    .vector-row { grid-template-columns: 1fr; }
+    .header-meta { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-top">
+      <span>Vol. I — №. 01</span>
+      <span>Retrieval-Augmented Generation</span>
+      <span>An Interactive Primer</span>
+    </div>
+    <h1>How a machine<br><em>remembers</em> &amp; answers.</h1>
+    <p class="subtitle">
+      A step-by-step simulator of Retrieval-Augmented Generation — the technique that lets language models look things up before they speak. Click through each stage to watch the pipeline unfold.
+    </p>
+    <div class="header-meta">
+      <div>STATUS / READY</div>
+      <div>PIPELINE / 5 STAGES</div>
+      <div>MODE / INTERACTIVE</div>
+    </div>
+  </header>
+
+  <!-- STEPPER -->
+  <nav class="stepper" id="stepper">
+    <button class="step-pill active" data-step="0">
+      <div class="step-num">STEP 01</div>
+      <div class="step-name">Documents</div>
+    </button>
+    <button class="step-pill" data-step="1">
+      <div class="step-num">STEP 02</div>
+      <div class="step-name">Chunking</div>
+    </button>
+    <button class="step-pill" data-step="2">
+      <div class="step-num">STEP 03</div>
+      <div class="step-name">Embedding</div>
+    </button>
+    <button class="step-pill" data-step="3">
+      <div class="step-num">STEP 04</div>
+      <div class="step-name">Retrieval</div>
+    </button>
+    <button class="step-pill" data-step="4">
+      <div class="step-num">STEP 05</div>
+      <div class="step-name">Generation</div>
+    </button>
+  </nav>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- STAGE -->
+    <main class="stage">
+      <div class="stage-header">
+        <div class="stage-title" id="stageTitle">The Knowledge Base</div>
+        <div class="stage-tag" id="stageTag">INGEST</div>
+      </div>
+
+      <div class="stage-body">
+
+        <!-- STEP 1: DOCUMENTS -->
+        <div class="step-content active" data-content="0">
+          <p class="stage-description">
+            Every RAG system begins with a <strong>corpus</strong> — the body of documents the model can refer to. These could be PDFs, web pages, manuals, or internal wikis. Below: a small library of three documents the simulator will use as ground truth.
+          </p>
+          <div class="doc-grid" id="docGrid"></div>
+        </div>
+
+        <!-- STEP 2: CHUNKING -->
+        <div class="step-content" data-content="1">
+          <p class="stage-description">
+            Documents are too large to handle whole. Each one is split into smaller <strong>chunks</strong> — overlapping passages of a few sentences each. Smaller chunks mean more precise retrieval; too-small chunks lose context.
+          </p>
+          <div class="chunk-stream" id="chunkStream"></div>
+        </div>
+
+        <!-- STEP 3: EMBEDDING -->
+        <div class="step-content" data-content="2">
+          <p class="stage-description">
+            Each chunk is passed through an <strong>embedding model</strong>, which converts text into a high-dimensional vector — a list of numbers capturing meaning. Similar ideas land near each other in this space.
+          </p>
+          <div class="vector-display">
+            <div class="vector-label">// VECTOR PREVIEW · first 24 of 1536 dimensions</div>
+            <div id="vectorRows"></div>
+          </div>
+          <div class="embedding-space" id="embedSpace">
+            <div class="embed-grid"></div>
+            <div class="embed-axes">SEMANTIC SPACE · 2D PROJECTION</div>
+          </div>
+        </div>
+
+        <!-- STEP 4: RETRIEVAL -->
+        <div class="step-content" data-content="3">
+          <p class="stage-description">
+            When a user asks a question, the query is embedded the same way. The system then finds chunks whose vectors are <strong>closest</strong> to the query vector — usually by cosine similarity. The top matches become the context.
+          </p>
+          <div class="query-box">
+            <div class="query-label">USER QUERY</div>
+            <div class="query-text" id="activeQuery">—</div>
+          </div>
+          <div class="similarity-list" id="simList"></div>
+        </div>
+
+        <!-- STEP 5: GENERATION -->
+        <div class="step-content" data-content="4">
+          <p class="stage-description">
+            The retrieved chunks are stuffed into the prompt as <strong>context</strong>, followed by the original question. The LLM now answers using both its training and the supplied evidence — grounded, citable, and far less likely to hallucinate.
+          </p>
+          <div class="prompt-build" id="promptBuild"></div>
+          <div class="answer-block">
+            <div class="answer-label">// MODEL OUTPUT</div>
+            <div class="answer-text" id="answerText"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <div class="panel">
+        <div class="panel-header">Controls</div>
+        <div class="panel-body">
+          <button class="control-btn" id="runBtn">▶ Run This Step</button>
+          <button class="control-btn secondary" id="nextBtn">Next Step →</button>
+          <button class="control-btn secondary" id="resetBtn">Reset Pipeline</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Try a Query</div>
+        <div class="panel-body">
+          <div class="query-options" id="queryOptions"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Legend</div>
+        <div class="panel-body">
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--accent-3)"></div>
+              <span>Document chunk</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--accent)"></div>
+              <span>Query vector</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--success)"></div>
+              <span>Retrieved match</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Glossary</div>
+        <div class="panel-body" id="glossary">
+          <strong>Corpus</strong> — the full set of source documents.<br><br>
+          <strong>Chunk</strong> — a small passage of text, the unit of retrieval.<br><br>
+          <strong>Embedding</strong> — a numeric vector representing meaning.
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <footer>
+    <span>© RAG Primer</span>
+    <span>An interactive walkthrough</span>
+    <span>5 stages · 3 docs · 1 model</span>
+  </footer>
+</div>
+
+<script>
+// ============ DATA ============
+const documents = [
+  {
+    id: 'doc-01',
+    type: 'TECHNICAL/PDF',
+    title: 'A Brief History of the Espresso Machine',
+    preview: 'Invented by Angelo Moriondo in 1884, the espresso machine was refined by Luigi Bezzera in 1901, who patented a steam-driven design...',
+    chunks: [
+      { id: 'c1', text: 'Angelo Moriondo of Turin patented the first known espresso machine in 1884. His design used both steam and water to brew coffee quickly for café customers.' },
+      { id: 'c2', text: 'Luigi Bezzera refined the design in 1901, creating a single-shot espresso machine. He sold the patent to Desiderio Pavoni in 1903.' },
+      { id: 'c3', text: 'In 1947, Achille Gaggia introduced the lever-piston machine, which produced higher pressure and the signature crema layer on top of espresso.' }
+    ]
+  },
+  {
+    id: 'doc-02',
+    type: 'ARTICLE/WEB',
+    title: 'Why Cats Purr — A Veterinary Overview',
+    preview: 'Cats purr at frequencies between 25 and 150 Hz. Recent studies suggest these vibrations promote tissue regeneration and bone healing...',
+    chunks: [
+      { id: 'c4', text: 'Domestic cats purr at frequencies between 25 and 150 Hertz. These low-frequency vibrations are produced by rapid laryngeal muscle movements.' },
+      { id: 'c5', text: 'Veterinary research suggests cat purring may aid bone healing and reduce pain. The frequency range overlaps with those used in human physical therapy.' },
+      { id: 'c6', text: 'Cats purr in many contexts: contentment, stress, hunger, and injury. The behavior is not exclusively a sign of happiness.' }
+    ]
+  },
+  {
+    id: 'doc-03',
+    type: 'MANUAL/INTERNAL',
+    title: 'Mars Atmosphere Composition Notes',
+    preview: 'The Martian atmosphere is composed of approximately 95% carbon dioxide, 2.8% nitrogen, and 2% argon, with trace amounts of oxygen...',
+    chunks: [
+      { id: 'c7', text: 'The atmosphere of Mars is composed of about 95% carbon dioxide, 2.8% nitrogen, and 2% argon, with traces of oxygen and water vapor.' },
+      { id: 'c8', text: 'Mars has an average surface pressure of about 610 pascals, less than 1% of Earth\'s sea-level pressure. Liquid water cannot persist on the surface.' },
+      { id: 'c9', text: 'Seasonal dust storms on Mars can engulf the entire planet, sometimes lasting months and significantly cooling surface temperatures.' }
+    ]
+  }
+];
+
+const queries = [
+  {
+    text: 'Who invented the first espresso machine?',
+    relevantChunks: ['c1', 'c2'],
+    answer: 'Angelo Moriondo of Turin patented the first known espresso machine in 1884. Luigi Bezzera later refined the design in 1901, creating a single-shot espresso machine.',
+    scores: { c1: 0.94, c2: 0.81, c3: 0.62, c4: 0.11, c5: 0.09, c6: 0.13, c7: 0.07, c8: 0.05, c9: 0.04 }
+  },
+  {
+    text: 'What is the Martian atmosphere made of?',
+    relevantChunks: ['c7', 'c8'],
+    answer: 'The Martian atmosphere is roughly 95% carbon dioxide, 2.8% nitrogen, and 2% argon, with trace amounts of oxygen and water vapor. Its surface pressure is less than 1% of Earth\'s.',
+    scores: { c1: 0.06, c2: 0.04, c3: 0.05, c4: 0.08, c5: 0.07, c6: 0.06, c7: 0.96, c8: 0.79, c9: 0.58 }
+  },
+  {
+    text: 'Why do cats purr when they\'re hurt?',
+    relevantChunks: ['c5', 'c6'],
+    answer: 'Cats purr in many contexts beyond happiness — including injury and stress. Some veterinary research suggests the low-frequency vibrations (25–150 Hz) may aid tissue and bone healing.',
+    scores: { c1: 0.05, c2: 0.04, c3: 0.06, c4: 0.71, c5: 0.91, c6: 0.88, c7: 0.05, c8: 0.04, c9: 0.06 }
+  }
+];
+
+// Fixed 2D positions for embedding-space visualization
+const chunkPositions = {
+  c1: { x: 18, y: 28 }, c2: { x: 24, y: 36 }, c3: { x: 22, y: 22 },
+  c4: { x: 72, y: 30 }, c5: { x: 78, y: 38 }, c6: { x: 80, y: 26 },
+  c7: { x: 50, y: 75 }, c8: { x: 56, y: 70 }, c9: { x: 44, y: 80 }
+};
+
+const queryPositions = [
+  { x: 21, y: 32 }, // espresso
+  { x: 50, y: 73 }, // mars
+  { x: 76, y: 32 }  // cats
+];
+
+const allChunks = documents.flatMap(d => d.chunks.map(c => ({ ...c, doc: d.title })));
+
+// ============ STATE ============
+let currentStep = 0;
+let currentQuery = 0;
+let stepComplete = [false, false, false, false, false];
+
+const stageMeta = [
+  { title: 'The Knowledge Base', tag: 'INGEST' },
+  { title: 'Splitting Into Chunks', tag: 'PREPROCESS' },
+  { title: 'Encoding As Vectors', tag: 'INDEX' },
+  { title: 'Finding The Best Matches', tag: 'QUERY' },
+  { title: 'Composing The Answer', tag: 'GENERATE' }
+];
+
+// ============ DOM ============
+const stepperEl = document.getElementById('stepper');
+const stageTitle = document.getElementById('stageTitle');
+const stageTag = document.getElementById('stageTag');
+const runBtn = document.getElementById('runBtn');
+const nextBtn = document.getElementById('nextBtn');
+const resetBtn = document.getElementById('resetBtn');
+const queryOptionsEl = document.getElementById('queryOptions');
+
+// ============ INIT ============
+function init() {
+  renderDocs();
+  renderQueryOptions();
+  setStep(0);
+
+  document.querySelectorAll('.step-pill').forEach(pill => {
+    pill.addEventListener('click', () => setStep(parseInt(pill.dataset.step)));
+  });
+
+  runBtn.addEventListener('click', runStep);
+  nextBtn.addEventListener('click', () => setStep(Math.min(currentStep + 1, 4)));
+  resetBtn.addEventListener('click', reset);
+}
+
+function setStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.step-pill').forEach((p, i) => {
+    p.classList.toggle('active', i === n);
+    p.classList.toggle('complete', stepComplete[i]);
+  });
+  document.querySelectorAll('.step-content').forEach((c, i) => {
+    c.classList.toggle('active', i === n);
+  });
+  stageTitle.textContent = stageMeta[n].title;
+  stageTag.textContent = stageMeta[n].tag;
+  runBtn.textContent = stepComplete[n] ? '↻ Run Again' : '▶ Run This Step';
+  nextBtn.disabled = n === 4;
+}
+
+// ============ RENDER: DOCS ============
+function renderDocs() {
+  const grid = document.getElementById('docGrid');
+  grid.innerHTML = documents.map(d => `
+    <div class="doc-card">
+      <div class="doc-icon">▢ ${d.type} · ${d.id}</div>
+      <div class="doc-title">${d.title}</div>
+      <div class="doc-preview">${d.preview}</div>
+    </div>
+  `).join('');
+}
+
+// ============ RENDER: QUERY OPTIONS ============
+function renderQueryOptions() {
+  queryOptionsEl.innerHTML = queries.map((q, i) => `
+    <button class="query-option ${i === currentQuery ? 'selected' : ''}" data-q="${i}">
+      ${q.text}
+    </button>
+  `).join('');
+  queryOptionsEl.querySelectorAll('.query-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentQuery = parseInt(btn.dataset.q);
+      renderQueryOptions();
+      // Reset retrieval+generation if changed
+      stepComplete[3] = false;
+      stepComplete[4] = false;
+      document.getElementById('simList').innerHTML = '';
+      document.getElementById('promptBuild').innerHTML = '';
+      document.getElementById('answerText').innerHTML = '';
+      document.getElementById('activeQuery').textContent = '—';
+      // Update embedding-space query position
+      renderEmbedSpace(false);
+      if (currentStep === 3 || currentStep === 4) setStep(currentStep);
+    });
+  });
+}
+
+// ============ STEP RUNNERS ============
+function runStep() {
+  if (currentStep === 0) runDocs();
+  else if (currentStep === 1) runChunking();
+  else if (currentStep === 2) runEmbedding();
+  else if (currentStep === 3) runRetrieval();
+  else if (currentStep === 4) runGeneration();
+}
+
+function markComplete(n) {
+  stepComplete[n] = true;
+  setStep(n);
+}
+
+// --- Step 1
+function runDocs() {
+  const cards = document.querySelectorAll('.doc-card');
+  cards.forEach((card, i) => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(12px)';
+    setTimeout(() => {
+      card.style.transition = 'all 0.5s ease';
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, i * 180);
+  });
+  setTimeout(() => markComplete(0), 900);
+}
+
+// --- Step 2
+function runChunking() {
+  const stream = document.getElementById('chunkStream');
+  stream.innerHTML = '';
+  allChunks.forEach((chunk, i) => {
+    const docInitials = chunk.doc.split(' ').map(w => w[0]).slice(0, 3).join('');
+    const el = document.createElement('div');
+    el.className = 'chunk';
+    el.innerHTML = `
+      <div class="chunk-meta">
+        <span>${docInitials} · CHUNK ${chunk.id.toUpperCase()}</span>
+        <span>${chunk.text.split(' ').length} tokens (approx)</span>
+      </div>
+      <div>${chunk.text}</div>
+    `;
+    stream.appendChild(el);
+    setTimeout(() => el.classList.add('visible'), 80 + i * 110);
+  });
+  setTimeout(() => markComplete(1), 80 + allChunks.length * 110 + 200);
+}
+
+// --- Step 3
+function runEmbedding() {
+  // Vector rows
+  const rows = document.getElementById('vectorRows');
+  const sample = allChunks.slice(0, 3);
+  rows.innerHTML = sample.map((c, i) => `
+    <div class="vector-row">
+      <div class="vector-text">${c.text.slice(0, 70)}...</div>
+      <div class="vector-bars" id="bars-${i}"></div>
+    </div>
+  `).join('');
+  // Animate bars
+  sample.forEach((c, i) => {
+    const bars = document.getElementById(`bars-${i}`);
+    bars.innerHTML = '';
+    for (let j = 0; j < 24; j++) {
+      const bar = document.createElement('div');
+      bar.className = 'vector-bar';
+      bar.style.height = '0%';
+      bars.appendChild(bar);
+      const seed = (c.text.charCodeAt(j % c.text.length) + j * 7) % 100;
+      setTimeout(() => {
+        bar.style.height = `${20 + seed * 0.7}%`;
+      }, 200 + i * 200 + j * 25);
+    }
+  });
+  // Embedding space scatter
+  renderEmbedSpace(true);
+  setTimeout(() => markComplete(2), 1400);
+}
+
+function renderEmbedSpace(animate) {
+  const space = document.getElementById('embedSpace');
+  // Clear previous points
+  space.querySelectorAll('.embed-point, .embed-label').forEach(n => n.remove());
+
+  allChunks.forEach((c, i) => {
+    const pos = chunkPositions[c.id];
+    const dot = document.createElement('div');
+    dot.className = 'embed-point';
+    dot.dataset.id = c.id;
+    dot.style.left = pos.x + '%';
+    dot.style.top = pos.y + '%';
+    if (animate) {
+      dot.style.opacity = '0';
+      dot.style.transform = 'translate(-50%, -50%) scale(0)';
+      setTimeout(() => {
+        dot.style.opacity = '1';
+        dot.style.transform = 'translate(-50%, -50%) scale(1)';
+      }, 600 + i * 80);
+    }
+    space.appendChild(dot);
+
+    const label = document.createElement('div');
+    label.className = 'embed-label';
+    label.textContent = c.id.toUpperCase();
+    label.style.left = pos.x + '%';
+    label.style.top = pos.y + '%';
+    space.appendChild(label);
+  });
+}
+
+// --- Step 4
+function runRetrieval() {
+  const q = queries[currentQuery];
+  document.getElementById('activeQuery').textContent = '“' + q.text + '”';
+
+  // Update embedding space with query + retrieved
+  const space = document.getElementById('embedSpace');
+  space.querySelectorAll('.embed-point').forEach(p => {
+    p.classList.remove('query', 'retrieved');
+    const id = p.dataset.id;
+    if (q.relevantChunks.includes(id)) {
+      setTimeout(() => p.classList.add('retrieved'), 600);
+    }
+  });
+  // Add query dot
+  let qDot = space.querySelector('.embed-point.query-dot');
+  if (qDot) qDot.remove();
+  qDot = document.createElement('div');
+  qDot.className = 'embed-point query query-dot';
+  const qPos = queryPositions[currentQuery];
+  qDot.style.left = qPos.x + '%';
+  qDot.style.top = qPos.y + '%';
+  space.appendChild(qDot);
+
+  // Sort chunks by score
+  const ranked = allChunks
+    .map(c => ({ ...c, score: q.scores[c.id] || 0 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+
+  const list = document.getElementById('simList');
+  list.innerHTML = '';
+  ranked.forEach((c, i) => {
+    const isTop = i < 2;
+    const row = document.createElement('div');
+    row.className = 'sim-row' + (isTop ? ' top' : '');
+    row.innerHTML = `
+      <div class="sim-rank">#${String(i+1).padStart(2,'0')} · ${c.id.toUpperCase()}</div>
+      <div class="sim-text">${c.text.slice(0, 100)}${c.text.length > 100 ? '...' : ''}</div>
+      <div class="sim-score">${c.score.toFixed(2)}</div>
+      <div class="sim-bar"><div class="sim-bar-fill" style="width:0"></div></div>
+    `;
+    list.appendChild(row);
+    setTimeout(() => {
+      row.classList.add('visible');
+      row.querySelector('.sim-bar-fill').style.width = (c.score * 100) + '%';
+    }, 200 + i * 130);
+  });
+
+  setTimeout(() => markComplete(3), 200 + ranked.length * 130 + 400);
+}
+
+// --- Step 5
+function runGeneration() {
+  const q = queries[currentQuery];
+  const retrieved = allChunks.filter(c => q.relevantChunks.includes(c.id));
+
+  const promptEl = document.getElementById('promptBuild');
+  promptEl.innerHTML = `
+    <div class="prompt-section">
+      <div class="prompt-section-label">// system</div>
+      <div>You are a helpful assistant. Answer the user's question using only the provided context. If unsure, say so.</div>
+    </div>
+    <div class="prompt-section context">
+      <div class="prompt-section-label">// retrieved context</div>
+      ${retrieved.map(c => `<div style="margin-bottom:6px">▸ <strong>[${c.id}]</strong> ${c.text}</div>`).join('')}
+    </div>
+    <div class="prompt-section query">
+      <div class="prompt-section-label">// user question</div>
+      <div>${q.text}</div>
+    </div>
+  `;
+
+  // Animate prompt sections appearing
+  const sections = promptEl.querySelectorAll('.prompt-section');
+  sections.forEach((s, i) => {
+    s.style.opacity = '0';
+    s.style.transform = 'translateX(-8px)';
+    setTimeout(() => {
+      s.style.transition = 'all 0.4s ease';
+      s.style.opacity = '1';
+      s.style.transform = 'translateX(0)';
+    }, i * 350);
+  });
+
+  // Type out the answer
+  const answerEl = document.getElementById('answerText');
+  answerEl.innerHTML = '';
+  const startDelay = sections.length * 350 + 400;
+  setTimeout(() => {
+    typeWriter(answerEl, q.answer, 18, () => markComplete(4));
+  }, startDelay);
+}
+
+function typeWriter(el, text, speed, done) {
+  let i = 0;
+  el.innerHTML = '<span class="typing-cursor"></span>';
+  const cursor = el.querySelector('.typing-cursor');
+  function tick() {
+    if (i < text.length) {
+      const node = document.createTextNode(text[i]);
+      el.insertBefore(node, cursor);
+      i++;
+      setTimeout(tick, speed);
+    } else {
+      setTimeout(() => { if (cursor) cursor.remove(); done && done(); }, 400);
+    }
+  }
+  tick();
+}
+
+// ============ RESET ============
+function reset() {
+  stepComplete = [false, false, false, false, false];
+  document.getElementById('chunkStream').innerHTML = '';
+  document.getElementById('vectorRows').innerHTML = '';
+  document.getElementById('simList').innerHTML = '';
+  document.getElementById('promptBuild').innerHTML = '';
+  document.getElementById('answerText').innerHTML = '';
+  document.getElementById('activeQuery').textContent = '—';
+  const space = document.getElementById('embedSpace');
+  space.querySelectorAll('.embed-point, .embed-label').forEach(n => n.remove());
+  setStep(0);
+}
+
+init();
+</script>
+
+</body>
+</html>
